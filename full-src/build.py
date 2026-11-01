@@ -13,5 +13,5 @@ assert t.count('/*__SOUNDS__*/{}') == 1, '템플릿에 /*__SOUNDS__*/{} 자리�
 j = open(os.path.join(here, 'sounds.json'), encoding='utf-8').read()
 open(os.path.join(here, 'sori-chaeksang.html'), 'w', encoding='utf-8').write(t.replace('/*__SOUNDS__*/{}', j))
 print('빌드 완료: sori-chaeksang.html', os.path.getsize(os.path.join(here, 'sori-chaeksang.html')), 'bytes')
-import shutil; shutil.copyfile(os.path.join(here, 'sori-chaeksang.html'), os.path.join(here, 'index.html'))
-print('index.html 복사 완료 (GitHub Pages용)')
+import shutil; shutil.copyfile(os.path.join(here, 'sori-chaeksang.html'), os.path.join(os.path.dirname(here), 'full.html'))
+print('../full.html 갱신')

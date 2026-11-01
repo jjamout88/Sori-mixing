@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1b1430">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>팡팡 팝잇</title>
+<style>
+:root{--bg:#1b1430;--bg2:#2a1f4a;--fg:#fff4d6;--mute:#b8a6e0;--accent:#ffd23f;--line:#0e0a1c;
+  --font:"DotGothic16","Galmuri11","NeoDunggeunmo","Apple SD Gothic Neo","Noto Sans KR",monospace;color-scheme:dark}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none;background:var(--bg);color:var(--fg);font-family:var(--font);
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;touch-action:none}
+body{position:fixed;inset:0;background:radial-gradient(circle at 50% 40%,var(--bg2),var(--bg) 70%)}
+#cv{position:absolute;left:0;top:0;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;display:block}
+.hud{position:absolute;left:0;right:0;top:0;padding:max(8px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));
+  display:flex;align-items:center;gap:10px;pointer-events:none;z-index:2;font-size:clamp(15px,2.2vw,22px);text-shadow:2px 2px 0 var(--line)}
+.hud b{color:var(--accent);font-weight:400}
+.hud .sp{flex:1}
+.ib{pointer-events:auto;font:inherit;font-size:clamp(13px,1.5vw,17px);color:var(--fg);background:var(--line);border:2px solid var(--fg);padding:5px 9px;cursor:pointer;box-shadow:3px 3px 0 #000;touch-action:manipulation}
+.ib:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #000}
+.ib[aria-pressed="true"]{color:var(--mute);border-color:var(--mute)}
+#cred{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(14,10,28,.86);padding:20px}
+#cred[hidden]{display:none}
+#cred .box{background:var(--bg2);border:3px solid var(--fg);box-shadow:6px 6px 0 #000;padding:16px 18px;max-width:440px;font-size:13px;line-height:1.7;touch-action:auto;-webkit-user-select:text;user-select:text}
+#cred h2{font-size:16px;font-weight:400;color:var(--accent);margin-bottom:8px}
+#cred a{color:#9fe6ff}
+#cred li{margin-left:18px}
+#cred .ib{margin-top:12px}
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap">
+</head>
+<body>
+<canvas id="cv" aria-label="팝잇. 눌러서 터뜨리기"></canvas>
+<div class="hud">
+  <span>팡 <b id="cnt">0</b></span><span>판 <b id="flips">0</b></span>
+  <span class="sp"></span>
+  <button class="ib" id="mute" type="button" aria-pressed="false">소리 ON</button>
+  <button class="ib" id="info" type="button">출처</button>
+</div>
+<div id="cred" hidden><div class="box">
+  <h2>소리 출처</h2>
+  <p>모든 팝 소리는 실제 녹음(Freesound)에서 한 번씩 잘라 음량을 맞췄어요.</p>
+  <ul>
+<li><a href="https://freesound.org/s/868928/" target="_blank" rel="noopener">Infinate bubble wrap toy</a> — Sadiquecat (CC0)</li>
+<li><a href="https://freesound.org/s/839343/" target="_blank" rel="noopener">Fidget Toy Bubble Pops</a> — haus.the.child (CC0)</li>
+<li><a href="https://freesound.org/s/857285/" target="_blank" rel="noopener">fidget toy</a> — dyingSatyr (CC0)</li>
+<li><a href="https://freesound.org/s/811021/" target="_blank" rel="noopener">Fidget Popper (TOYMisc)</a> — designerschoice (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>)</li>
+  </ul>
+  <button class="ib" id="credClose" type="button">닫기</button>
+</div></div>
+<script>
+const SOUNDS = /*__SOUNDS__*/{};
+</script>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const cv = $('cv'), g = cv.getContext('2d', {alpha:false});
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const PAL = ['#ff4d6d','#ff8c42','#ffd23f','#5ee06e','#3fc1ff','#8c6bff','#ff6bd6'];
+const rnd = (a,b) => a + Math.random()*(b-a);
+const clamp = (x,a,b) => Math.max(a, Math.min(b, x));
+function shade(hex, f){ // f<0 어둡게, f>0 밝게
+  const n = parseInt(hex.slice(1),16); let r = n>>16, gg = (n>>8)&255, b = n&255;
+  const t = f < 0 ? 0 : 255, p = Math.abs(f);
+  r = Math.round(r + (t-r)*p); gg = Math.round(gg + (t-gg)*p); b = Math.round(b + (t-b)*p);
+  return `rgb(${r},${gg},${b})`;
+}
+
+// ── 오디오: 페이지 열 때 미리 디코딩, 첫 터치에서 resume → 첫 팡부터 바로 소리 ──
+const AC = window.AudioContext || window.webkitAudioContext;
+let ac = null, master = null, BUF = [], lastIdx = -1, muted = false;
+function initAudio(){
+  if (ac) return; ac = new AC({latencyHint:'interactive'});
+  master = ac.createGain(); master.gain.value = 1;
+  const comp = ac.createDynamicsCompressor(); comp.threshold.value = -10; comp.ratio.value = 4; comp.attack.value = .001; comp.release.value = .08;
+  master.connect(comp); comp.connect(ac.destination);
+  const list = SOUNDS.popit || [];
+  list.forEach((b64, i) => {
+    const bin = atob(b64), u8 = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) u8[k] = bin.charCodeAt(k);
+    ac.decodeAudioData(u8.buffer, b => { BUF.push(b); }, () => {});
+  });
+}
+function unlock(){ initAudio(); if (ac.state !== 'running') ac.resume(); }
+function pop(pan, {rate=1, vol=1, t0=0}={}){
+  if (!ac || muted || !BUF.length) return;
+  let i = (Math.random()*BUF.length)|0; if (i === lastIdx && BUF.length > 1) i = (i+1) % BUF.length; lastIdx = i;
+  const s = ac.createBufferSource(); s.buffer = BUF[i];
+  s.playbackRate.value = rate * rnd(.93, 1.08);
+  const gn = ac.createGain(); gn.gain.value = vol * rnd(.82, 1);
+  let node = gn; if (ac.createStereoPanner){ const p = ac.createStereoPanner(); p.pan.value = clamp(pan, -.8, .8); gn.connect(p); node = p; }
+  s.connect(gn); node.connect(master); s.start(ac.currentTime + t0);
+}
+
+// ── 레이아웃: 화면을 꽉 채우는 팝잇 한 장 ──
+let W, H, PX, lw, lh, cols, rows, cell, R, bx, by, bw, bh, cells = [], side = 0, sprites = {};
+function layout(){
+  W = innerWidth; H = innerHeight;
+  PX = Math.max(3, Math.round(Math.min(W, H) / 130));     // 도트 하나 크기(CSS px)
+  lw = Math.ceil(W / PX); lh = Math.ceil(H / PX);
+  const dpr = 1; cv.width = lw * dpr; cv.height = lh * dpr;
+  g.imageSmoothingEnabled = false;
+  const top = Math.ceil(46 / PX), pad = Math.ceil(10 / PX);
+  const aw = lw - pad*2, ah = lh - top - pad*2;
+  const T = clamp(Math.min(aw, ah) / 5.2, 56/PX, 112/PX);  // 칸 하나 목표 크기(도트)
+  cols = clamp(Math.floor(aw / T), 4, 14); rows = clamp(Math.floor(ah / T), 4, 14);
+  cell = Math.floor(Math.min((aw - 6) / cols, (ah - 6) / rows));
+  R = Math.floor(cell * .40);
+  bw = cell * cols + 6; bh = cell * rows + 6;
+  bx = Math.floor((lw - bw) / 2); by = top + pad + Math.floor((ah - bh) / 2);
+  const old = cells; cells = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++){
+    const o = old.find(x => x.r === r && x.c === c);
+    cells.push({r, c, x: bx + 3 + c*cell + cell/2, y: by + 3 + r*cell + cell/2, down: o ? o.down : false, anim: 0, wob: 0});
+  }
+  buildSprites();
+}
+function rowColor(r){ const i = side ? (PAL.length - 1 - (r % PAL.length)) : (r % PAL.length); return PAL[i]; }
+// 픽셀 원 스프라이트: 볼록(up) / 눌림(down)
+function makeSprite(col, down){
+  const s = R*2 + 4, c = document.createElement('canvas'); c.width = s; c.height = s; const x = c.getContext('2d');
+  const cx = s/2, cy = s/2;
+  for (let py = 0; py < s; py++) for (let px = 0; px < s; px++){
+    const dx = px + .5 - cx, dy = py + .5 - cy, d = Math.hypot(dx, dy);
+    if (d > R + 1) continue;
+    let f;
+    if (d > R) f = shade(col, -.72);                         // 외곽선
+    else if (!down){
+      const l = (-dx - dy) / (R*1.4);                         // 왼쪽 위가 밝음
+      if (d > R - 2 && dx + dy > 0) f = shade(col, -.38);     // 아래 그림자 테두리
+      else if (l > .55) f = shade(col, .55);
+      else if (l > .2) f = shade(col, .22);
+      else if (l < -.45) f = shade(col, -.18);
+      else f = col;
+    } else {
+      const l = (dx + dy) / (R*1.4);                          // 눌리면 빛이 반대
+      if (d > R - 2 && dx + dy < 0) f = shade(col, -.55);
+      else if (d < R*.55) f = shade(col, -.32 + (l > .3 ? .12 : 0));
+      else if (l > .4) f = shade(col, .1);
+      else f = shade(col, -.22);
+    }
+    x.fillStyle = f; x.fillRect(px, py, 1, 1);
+  }
+  if (!down){ x.fillStyle = '#fff'; const hs = Math.max(2, Math.round(R/5)); x.fillRect(Math.round(cx - R*.5), Math.round(cy - R*.55), hs, hs); x.fillRect(Math.round(cx - R*.5) + hs, Math.round(cy - R*.55) + hs, Math.max(1,hs>>1), Math.max(1,hs>>1)); }
+  return c;
+}
+function buildSprites(){ sprites = {}; for (const col of PAL){ sprites[col+'u'] = makeSprite(col, false); sprites[col+'d'] = makeSprite(col, true); } }
+
+// ── 이펙트 ──
+const parts = [], rings = [], words = [];
+let shake = 0, flash = 0, flip = null, count = 0, flips = 0;
+const WORDS = ['팡','팡!','뽁','팡팡','뿅'];
+function burst(x, y, col, n, big){
+  for (let i = 0; i < n; i++){
+    const a = rnd(0, Math.PI*2), sp = rnd(.6, big ? 3.6 : 2.4);
+    parts.push({x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - rnd(.3, 1.2), life: rnd(18, 34), max: 34, s: Math.random() < .25 ? 2 : 1,
+      col: Math.random() < .3 ? '#ffffff' : (Math.random() < .5 ? col : shade(col, .35))});
+  }
+}
+function hitCell(c, strong=true){
+  const col = rowColor(c.r);
+  c.down = true; c.anim = 1; count++; $('cnt').textContent = count;
+  const pan = (c.x / lw) * 1.6 - .8, pitch = 1.06 - (c.r / Math.max(1, rows-1)) * .12;
+  pop(pan, {rate: pitch, vol: 1});
+  burst(c.x, c.y, col, RM ? 6 : 12, false);
+  rings.push({x: c.x, y: c.y, r: R*.5, life: 9});
+  if (Math.random() < .55) words.push({x: c.x + rnd(-R*.3, R*.3), y: c.y - R*.4, t: WORDS[(Math.random()*WORDS.length)|0], life: 26, col});
+  shake = Math.min(RM ? 1 : 4, shake + (RM ? .5 : 2.2)); flash = Math.max(flash, .16);
+  if (navigator.vibrate) try { navigator.vibrate(8); } catch(_){}
+  if (cells.every(x => x.down)) setTimeout(startFlip, 260);
+}
+function nudge(c){ // 이미 눌린 칸: 살짝 흔들리고 둔한 소리
+  if (c.wob > .3) return; c.wob = 1; pop((c.x/lw)*1.6-.8, {rate:.72, vol:.28});
+}
+function startFlip(){
+  if (flip || !cells.every(x => x.down)) return;
+  flip = {t: 0, swapped: false};
+}
+function doSwap(){
+  side ^= 1; flips++; $('flips').textContent = flips;
+  cells.forEach(c => { c.down = false; c.anim = .6; });
+  // 뒤집히면서 전체가 '와르르' 튀어나오는 소리 + 큰 폭죽
+  for (let i = 0; i < 9; i++) pop(rnd(-.6,.6), {rate: rnd(.85, 1.15), vol: .45, t0: i*.018 + rnd(0,.01)});
+  cells.forEach(c => { if (Math.random() < .5) burst(c.x, c.y, rowColor(c.r), 4, true); });
+  words.push({x: lw/2, y: by + bh/2, t: '뒤집기!', life: 50, col: '#ffd23f', big: true});
+  shake = RM ? 1 : 7; flash = .35;
+}
+
+// ── 입력: 멀티터치 + 쓸어서 터뜨리기 ──
+const lastCell = new Map();
+function cellAt(clientX, clientY){
+  const x = clientX / PX, y = clientY / PX;
+  const c = Math.floor((x - bx - 3) / cell), r = Math.floor((y - by - 3) / cell);
+  if (c < 0 || r < 0 || c >= cols || r >= rows) return null;
+  const k = cells[r*cols + c]; return Math.hypot(x - k.x, y - k.y) <= R * 1.12 ? k : null;
+}
+function onDown(e){
+  e.preventDefault(); unlock(); if (flip) return;
+  const k = cellAt(e.clientX, e.clientY); lastCell.set(e.pointerId, k);
+  if (!k) return; k.down ? nudge(k) : hitCell(k);
+}
+function onMove(e){
+  if (!lastCell.has(e.pointerId) || flip) return; e.preventDefault();
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for (const ev of (evs.length ? evs : [e])){
+    const k = cellAt(ev.clientX, ev.clientY);
+    if (k && k !== lastCell.get(e.pointerId)){ lastCell.set(e.pointerId, k); if (!k.down) hitCell(k); }
+    else if (!k) lastCell.set(e.pointerId, null);
+  }
+}
+function onUp(e){ lastCell.delete(e.pointerId); }
+cv.addEventListener('pointerdown', onDown, {passive:false});
+cv.addEventListener('pointermove', onMove, {passive:false});
+['pointerup','pointercancel','lostpointercapture'].forEach(t => cv.addEventListener(t, onUp));
+// 확대·스크롤·길게 누르기 막기
+['touchstart','touchmove','touchend'].forEach(t => document.addEventListener(t, e => { if (!e.target.closest('#cred .box, .ib')) e.preventDefault(); }, {passive:false}));
+['gesturestart','gesturechange','dblclick','contextmenu'].forEach(t => document.addEventListener(t, e => e.preventDefault(), {passive:false}));
+window.addEventListener('keydown', e => { // 키보드로도: 아무 키나 누르면 무작위 칸 팡
+  if (e.repeat || e.metaKey || e.ctrlKey) return; unlock(); if (flip) return;
+  const up = cells.filter(c => !c.down); if (up.length) hitCell(up[(Math.random()*up.length)|0]);
+});
+
+// ── 그리기 ──
+function frame(){
+  requestAnimationFrame(frame);
+  let sx = 0, sy = 0; if (shake > .05){ sx = Math.round(rnd(-shake, shake)); sy = Math.round(rnd(-shake, shake)); shake *= .78; } else shake = 0;
+  g.setTransform(1,0,0,1,0,0);
+  g.fillStyle = '#1b1430'; g.fillRect(0, 0, lw, lh);
+  // 배경 도트 패턴
+  g.fillStyle = '#241a40'; for (let y = 2; y < lh; y += 8) for (let x = (y/8)%2 ? 6 : 2; x < lw; x += 8) g.fillRect(x, y, 1, 1);
+  // 판 뒤집기 애니메이션: 가로로 납작해졌다가 다시
+  let fx = 1;
+  if (flip){ flip.t += 1/28; const t = Math.min(1, flip.t); fx = Math.max(.04, Math.abs(Math.cos(t*Math.PI)));
+    if (t >= .5 && !flip.swapped){ flip.swapped = true; doSwap(); } if (t >= 1) flip = null; }
+  const cx = lw/2;
+  g.setTransform(fx, 0, 0, 1, Math.round(cx - cx*fx) + sx, sy);
+  // 판
+  g.fillStyle = '#0e0a1c'; g.fillRect(bx - 1, by + 2, bw + 2, bh + 1);
+  for (let r = 0; r < rows; r++){ const col = rowColor(r); g.fillStyle = shade(col, -.15); g.fillRect(bx, by + 3 + r*cell, bw, cell + (r === rows-1 ? 3 : 0)); }
+  g.fillStyle = shade(rowColor(0), -.15); g.fillRect(bx, by, bw, 3);
+  g.fillStyle = 'rgba(255,255,255,.22)'; g.fillRect(bx, by, bw, 1); g.fillRect(bx, by, 1, bh);
+  g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(bx, by + bh - 1, bw, 1); g.fillRect(bx + bw - 1, by, 1, bh);
+  // 모서리 둥글게(도트 계단)
+  g.fillStyle = '#1b1430'; [[bx,by],[bx+bw-2,by],[bx,by+bh-2],[bx+bw-2,by+bh-2]].forEach(([x,y]) => g.fillRect(x, y, 2, 2));
+  // 칸
+  for (const c of cells){
+    const col = rowColor(c.r), sp = sprites[col + (c.down ? 'd' : 'u')], s = sp.width;
+    let scx = 1, scy = 1;
+    if (c.anim > 0){ const a = c.anim; scx = 1 + .28*a*Math.sin(a*Math.PI); scy = 1 - .30*a*Math.sin(a*Math.PI); c.anim = Math.max(0, a - .12); }
+    if (c.wob > 0){ scx *= 1 + .08*Math.sin(c.wob*12); c.wob = Math.max(0, c.wob - .1); }
+    const dw = Math.round(s*scx), dh = Math.round(s*scy);
+    g.drawImage(sp, Math.round(c.x - dw/2), Math.round(c.y - dh/2), dw, dh);
+  }
+  // 링(파팍 번쩍)
+  for (let i = rings.length - 1; i >= 0; i--){ const q = rings[i]; q.r += R*.16; q.life--;
+    g.fillStyle = q.life > 5 ? '#ffffff' : '#ffe9a6'; const n = 14;
+    for (let k = 0; k < n; k++){ const a = k/n*Math.PI*2 + q.life*.1; g.fillRect(Math.round(q.x + Math.cos(a)*q.r), Math.round(q.y + Math.sin(a)*q.r), 1, 1); }
+    if (q.life <= 0) rings.splice(i, 1); }
+  // 도트 파편
+  for (let i = parts.length - 1; i >= 0; i--){ const p = parts[i]; p.x += p.vx; p.y += p.vy; p.vy += .12; p.vx *= .97; p.life--;
+    if (p.life <= 0){ parts.splice(i,1); continue; }
+    g.fillStyle = p.col; const s = p.life < 8 ? 1 : p.s; g.fillRect(Math.round(p.x), Math.round(p.y), s, s); }
+  if (parts.length > 900) parts.splice(0, parts.length - 900);
+  // 글자
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let i = words.length - 1; i >= 0; i--){ const w = words[i]; w.y -= w.big ? .25 : .45; w.life--;
+    if (w.life <= 0){ words.splice(i,1); continue; }
+    const fs = w.big ? Math.max(12, Math.round(R*1.1)) : Math.max(7, Math.round(R*.55));
+    g.font = `${fs}px "DotGothic16", monospace`; g.globalAlpha = Math.min(1, w.life/10);
+    g.fillStyle = '#0e0a1c'; g.fillText(w.t, Math.round(w.x)+1, Math.round(w.y)+1); g.fillStyle = w.big ? w.col : '#fff'; g.fillText(w.t, Math.round(w.x), Math.round(w.y));
+    g.globalAlpha = 1; }
+  g.setTransform(1,0,0,1,0,0);
+  if (flash > .01){ g.fillStyle = `rgba(255,255,255,${flash.toFixed(3)})`; g.fillRect(0, 0, lw, lh); flash *= .6; }
+}
+
+// ── UI ──
+$('mute').addEventListener('click', e => { unlock(); muted = !muted; e.currentTarget.setAttribute('aria-pressed', muted); e.currentTarget.textContent = muted ? '소리 OFF' : '소리 ON'; });
+$('info').addEventListener('click', () => { $('cred').hidden = false; });
+$('credClose').addEventListener('click', () => { $('cred').hidden = true; });
+$('cred').addEventListener('click', e => { if (e.target.id === 'cred') $('cred').hidden = true; });
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(layout, 80); });
+layout(); initAudio(); requestAnimationFrame(frame);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {});
+window.__pop = { get cells(){ return cells; }, get count(){ return count; }, get flips(){ return flips; }, get bufs(){ return BUF.length; }, get ac(){ return ac; }, get side(){ return side; }, get parts(){ return parts.length; }, PX: () => PX };
+})();
+</script>
+</body>
+</html>
