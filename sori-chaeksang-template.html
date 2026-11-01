@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1a1611">
+<title>소리 믹싱 책상</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap">
+<style>
+/* 단일 테마(스탠드 켠 밤 책상). 색은 :root 토큰만 바꾸면 전체가 바뀐다 */
+:root{
+  --bg:#1a1611; --desk:#3a2d22; --desk-edge:#2a2018; --fg:#f1e9dc; --mute:#a69684;
+  --accent:#f4c66d; --accent-2:#7fd1c3; --rec:#ff6b5e; --line:#574535;
+  --font-pix:"DotGothic16","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  --font-body:"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+html{touch-action:manipulation;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:max(10px,env(safe-area-inset-top,0px));padding-bottom:max(10px,env(safe-area-inset-bottom,0px));
+  display:flex;flex-direction:column;gap:10px;overflow-x:hidden;
+  -webkit-user-select:none;user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--font-pix);font-size:20px;margin:0;color:var(--accent)}
+.stats{display:flex;gap:14px;font-family:var(--font-pix);font-size:13px;color:var(--mute);font-variant-numeric:tabular-nums}
+.stats b{color:var(--fg);font-weight:400}
+
+/* ── 믹서 바 (녹음/재생) ── */
+.mixer{position:sticky;top:0;z-index:6;background:#241c15;border:2px solid var(--line);border-radius:6px;padding:8px 10px;
+  display:grid;grid-template-columns:auto 1fr auto;gap:6px 12px;align-items:center;box-shadow:0 6px 14px rgba(0,0,0,.45)}
+.timer{font-family:var(--font-pix);font-size:30px;line-height:1;color:var(--fg);font-variant-numeric:tabular-nums;min-width:4.2ch}
+.mixer[data-st="rec"] .timer{color:var(--rec)}
+.mixer[data-st="play"] .timer{color:var(--accent-2)}
+.status{font-family:var(--font-pix);font-size:12px;color:var(--mute);display:flex;align-items:center;gap:6px;min-width:0}
+.status .dot{width:10px;height:10px;border-radius:50%;background:#5a4a3a;flex:none}
+.mixer[data-st="armed"] .dot{background:var(--rec);animation:blink 1s steps(2) infinite}
+.mixer[data-st="rec"] .dot{background:var(--rec);box-shadow:0 0 8px var(--rec);animation:blink .6s steps(2) infinite}
+.mixer[data-st="play"] .dot{background:var(--accent-2);box-shadow:0 0 8px var(--accent-2)}
+@keyframes blink{50%{opacity:.25}}
+.bar{grid-column:1/-1;height:8px;background:#15100c;border:1px solid var(--line);border-radius:4px;position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;width:0;background:var(--accent)}
+.mixer[data-st="rec"] .bar i{background:var(--rec)}
+.mixer[data-st="play"] .bar i{background:var(--accent-2)}
+.bar .ev{position:absolute;top:0;bottom:0;width:2px;background:rgba(255,255,255,.35)}
+.mbtns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.mb{font-family:var(--font-pix);font-size:13px;border:0;border-radius:3px;padding:9px 12px;cursor:pointer;color:#1a1408;background:var(--accent);box-shadow:0 3px 0 #a9823c;white-space:nowrap}
+.mb:active{transform:translateY(2px);box-shadow:0 1px 0 #a9823c}
+.mb.rec{background:var(--rec);box-shadow:0 3px 0 #a6413a;color:#fff}
+.mb.play{background:var(--accent-2);box-shadow:0 3px 0 #4c8f84}
+.mb.ghostb{background:#2a2018;color:var(--fg);box-shadow:0 3px 0 #120d09;border:1px solid var(--line)}
+.mb[hidden]{display:none}
+.vol{display:flex;align-items:center;gap:6px;font-family:var(--font-pix);font-size:11px;color:var(--mute)}
+.vol input{width:80px;accent-color:var(--accent)}
+@media (max-width:620px){.mixer{grid-template-columns:auto 1fr}.mbtns{grid-column:1/-1;justify-content:stretch}.mb{flex:1}.timer{font-size:26px}}
+
+.desk{position:relative;flex:1;background:var(--desk);border:3px solid var(--desk-edge);border-radius:6px;padding:12px;
+  display:grid;grid-template-columns:repeat(6,1fr);grid-auto-flow:row dense;gap:10px;
+  background-image:repeating-linear-gradient(90deg,transparent 0 46px,rgba(0,0,0,.08) 46px 48px)}
+.zone{min-width:0;display:flex;flex-direction:column;gap:6px}
+.zone .lab{font-family:var(--font-pix);font-size:11px;color:var(--mute);letter-spacing:.5px;display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.zone .lab button{font:inherit;color:var(--accent-2);background:none;border:0;padding:0;cursor:pointer}
+.lab .src{color:#6f6354;font-size:10px;white-space:nowrap}
+.lab .new{color:var(--accent);font-size:10px}
+.wrap{grid-column:span 3}.kb{grid-column:span 3}.zone.wax,.zone.pz{grid-column:span 2}
+@media (max-width:620px){.desk{grid-template-columns:repeat(2,1fr);padding:8px;gap:8px}.wrap,.kb,.zone.wax,.zone.pz{grid-column:span 2}}
+
+/* 재생 중 눌린 물건 반짝 */
+.ghost{outline:3px solid var(--accent-2)!important;outline-offset:1px;filter:brightness(1.25)}
+
+/* 뽁뽁이 */
+.bubbles{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;background:#86add0;padding:6px;border-radius:4px;border:2px solid #5f88ad;touch-action:none}
+.bub{aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0 18%,#d7ebfb 20% 60%,#9cc1e0 62%);border:0;cursor:pointer;padding:0;
+  box-shadow:inset -2px -2px 0 #6f98bd;transition:transform .05s;touch-action:none}
+.bub:active{transform:scale(.9)}
+.bub.flat{background:#9fbfdc;box-shadow:inset 1px 1px 0 #6f98bd;border-radius:35%;transform:scale(.8);cursor:default}
+/* 키보드 */
+.keys{display:flex;flex-direction:column;gap:4px;background:#2b2f36;padding:6px;border-radius:4px;border:2px solid #15181d}
+.row{display:flex;gap:4px}
+.key{flex:1;min-width:0;height:34px;background:#5b6370;border:0;border-bottom:4px solid #343a44;border-radius:3px;color:#dfe5ee;
+  font-family:var(--font-pix);font-size:13px;cursor:pointer;padding:0;touch-action:manipulation}
+.key.space{flex:4}
+.key.down{border-bottom-width:1px;transform:translateY(3px);background:#4f5764}
+/* 패드 */
+.pad{flex:1;min-height:74px;border:0;border-radius:6px;cursor:pointer;font-family:var(--font-pix);font-size:14px;color:var(--fg);
+  display:flex;align-items:flex-end;justify-content:flex-start;padding:8px;text-shadow:0 1px 0 rgba(0,0,0,.6);position:relative;overflow:hidden;
+  transition:transform .06s,filter .06s;touch-action:manipulation}
+.pad:active,.pad.held{transform:scale(.96);filter:brightness(1.12)}
+.pad > span{position:relative;z-index:1}
+.pad.slime{background:#5fbf6a;box-shadow:inset 0 -14px 0 #3b8d46,inset 0 6px 0 #a9f0ae;border-radius:40% 45% 30% 35%/45% 40% 30% 30%}
+.pad.slime.held{border-radius:50% 35% 45% 30%/30% 50% 35% 45%;transform:scale(1.03,.9)}
+.pad.gravel{background:#7d7569;background-image:radial-gradient(#a79e8f 2px,transparent 2.5px),radial-gradient(#5a534a 2px,transparent 2.5px);background-size:14px 14px,19px 19px;background-position:0 0,7px 9px}
+.pad.water{background:#2f6f9e;background-image:repeating-linear-gradient(0deg,transparent 0 9px,rgba(255,255,255,.18) 9px 10px)}
+.pad.water::after{content:"";position:absolute;right:16px;top:12px;width:14px;height:18px;background:#bfe6ff;border-radius:50% 50% 50% 50%/60% 60% 40% 40%;clip-path:polygon(50% 0,100% 60%,85% 95%,15% 95%,0 60%)}
+.pad.pour{background:#3c84b8;background-image:linear-gradient(180deg,transparent 0 40%,rgba(255,255,255,.2) 40% 44%,transparent 44%)}
+.pad.wood{background:#9a6b45;background-image:repeating-linear-gradient(0deg,transparent 0 11px,#6f4a2e 11px 12px)}
+.pad.floor{background:#7a5a3c;background-image:repeating-linear-gradient(90deg,transparent 0 18px,#5c4330 18px 19px)}
+.pad.door{background:#6b4a33;box-shadow:inset 0 0 0 4px #4d3324,inset 0 0 0 6px #8a6a4f}
+.pad.door::after{content:"";position:absolute;right:14px;top:50%;width:8px;height:8px;border-radius:50%;background:#f4c66d}
+.pad.tape{background:#c9b27e;background-image:repeating-linear-gradient(90deg,transparent 0 6px,rgba(255,255,255,.25) 6px 8px)}
+.pad.mouse{background:#dcdcdc;color:#222;text-shadow:none;border-radius:40% 40% 48% 48%/50% 50% 40% 40%}
+.pad.mouse::after{content:"";position:absolute;left:50%;top:0;width:2px;height:40%;background:#aaa}
+.pad.switch{background:#2c3038;box-shadow:inset 0 0 0 3px #15181d}
+.pad.switch::after{content:"";position:absolute;left:50%;top:12px;width:14px;height:28px;margin-left:-7px;background:#dfe5ee;border-radius:3px;transition:transform .1s}
+.pad.switch.on::after{transform:translateY(16px)}
+/* 새 패드들 */
+.pad.soap{background:linear-gradient(180deg,#f3d7f7 0 30%,#e2b6ec 30% 62%,#c995da 62%);box-shadow:inset 0 -6px 0 rgba(0,0,0,.12)}
+.pad.soap::after{content:"";position:absolute;left:58%;top:-6px;width:4px;height:120%;background:linear-gradient(#e8edf2,#9aa4ad);transform:rotate(12deg);box-shadow:0 0 0 1px rgba(0,0,0,.2)}
+.pad.sand{background:#e79ab0;background-image:radial-gradient(rgba(255,255,255,.35) 1px,transparent 1.5px),radial-gradient(rgba(120,40,70,.25) 1px,transparent 1.5px);background-size:6px 6px,9px 9px;background-position:0 0,3px 4px;border-radius:14px 14px 30px 30px}
+.pad.ice{background:#183a4d}
+.pad.ice::before,.pad.ice::after{content:"";position:absolute;width:30px;height:30px;border-radius:5px;background:linear-gradient(135deg,#f2fdff 0 20%,#bfe9f5 22% 70%,#8fd0e6);box-shadow:inset -3px -3px 0 rgba(0,0,0,.08)}
+.pad.ice::before{right:12px;top:10px;transform:rotate(12deg)}.pad.ice::after{right:36px;top:24px;transform:rotate(-18deg);width:24px;height:24px}
+.pad.page{background:#efe4c8;color:#3a2d22;text-shadow:none;background-image:repeating-linear-gradient(180deg,transparent 0 11px,#cdbf9c 11px 12px)}
+.pad.page::after{content:"";position:absolute;right:0;top:0;border-style:solid;border-width:0 22px 22px 0;border-color:transparent var(--desk) #d6c7a2 transparent}
+.pad.glass{background:#21303a}
+.pad.glass::after{content:"";position:absolute;left:50%;top:10px;width:28px;height:40px;margin-left:-14px;border:2px solid rgba(220,245,255,.8);border-top-width:1px;border-radius:2px 2px 12px 12px;background:linear-gradient(90deg,rgba(255,255,255,.35) 0 18%,rgba(180,220,240,.15) 20%)}
+.pad.scissors{background:#3f4652}
+.pad.scissors::before,.pad.scissors::after{content:"";position:absolute;left:50%;top:6px;width:6px;height:40px;background:linear-gradient(#e7ecf2,#9aa4ad);border-radius:3px 3px 1px 1px;transform-origin:50% 100%}
+.pad.scissors::before{transform:rotate(-14deg);margin-left:-5px}.pad.scissors::after{transform:rotate(14deg);margin-left:-1px}
+.pad.scissors.snip::before{transform:rotate(-3deg)}.pad.scissors.snip::after{transform:rotate(3deg)}
+.pad.velcro{background:#26304a;background-image:radial-gradient(#5d6c96 1.2px,transparent 1.6px);background-size:5px 5px}
+.pad.zipper{background:#3d5b84;background-image:repeating-linear-gradient(90deg,transparent 0 5px,rgba(0,0,0,.1) 5px 6px)}
+.pad.zipper::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:10px;margin-left:-5px;background:repeating-linear-gradient(180deg,#d8c18a 0 3px,#8b7a52 3px 6px)}
+.pad.marble{background:#4b3a2b;background-image:
+  radial-gradient(circle at 30% 30%,#fff 0 8%,#5cc8f0 10% 45%,#1f6f9a 47%,transparent 49%),
+  radial-gradient(circle at 30% 30%,#fff 0 8%,#f06a8a 10% 45%,#9a2f4a 47%,transparent 49%),
+  radial-gradient(circle at 30% 30%,#fff 0 8%,#8ee07a 10% 45%,#3d8a30 47%,transparent 49%);
+  background-size:30px 30px;background-repeat:no-repeat;background-position:right 12px top 10px,right 44px top 18px,right 22px top 36px}
+.pad.pencil{background:#2f2a24}
+.pad.pencil::after{content:"";position:absolute;right:-6px;top:20px;width:90px;height:12px;transform:rotate(-28deg);
+  background:linear-gradient(90deg,#3a3a3a 0 6%,#e9c99a 6% 20%,#f4c63d 20% 86%,#c9c9c9 86% 92%,#e88a9a 92%)}
+.pad.foam{background:#5c8a3a;background-image:radial-gradient(#3e6326 1.4px,transparent 1.8px),radial-gradient(#7fae5a 1px,transparent 1.4px);background-size:7px 7px,5px 5px;background-position:0 0,2px 3px}
+/* 팝잇 */
+.popit{flex:1;display:grid;grid-template-columns:repeat(6,1fr);gap:5px;padding:7px;border-radius:12px;touch-action:none;
+  background:linear-gradient(90deg,#ff7b7b,#ffb36b,#ffe36b,#8fe07a,#6bc8ff,#b48cff)}
+.pi{aspect-ratio:1;border:0;padding:0;border-radius:50%;cursor:pointer;touch-action:none;background:radial-gradient(circle at 38% 32%,rgba(255,255,255,.55) 0 22%,transparent 26%),rgba(255,255,255,.12);
+  box-shadow:0 3px 0 rgba(0,0,0,.25),inset 0 -3px 0 rgba(0,0,0,.12);transition:transform .05s}
+.pi.in{background:rgba(0,0,0,.14);box-shadow:inset 0 3px 3px rgba(0,0,0,.3);transform:scale(.9)}
+/* 왁뿌볼 */
+.waxrow{display:flex;gap:8px;flex:1}
+.wax-ball{flex:1;min-width:0;aspect-ratio:1;max-height:110px;border:0;border-radius:50%;cursor:pointer;padding:0;position:relative;
+  background:radial-gradient(circle at 32% 28%,#fff6d8 0 12%,var(--wc) 16% 70%,color-mix(in srgb,var(--wc) 60%,#000) 100%);
+  box-shadow:inset -4px -6px 0 rgba(0,0,0,.18),0 3px 0 rgba(0,0,0,.3);transition:transform .06s;touch-action:manipulation}
+.wax-ball:active{transform:scale(.92)}
+.wax-ball::before,.wax-ball::after{content:"";position:absolute;inset:0;border-radius:50%;opacity:0;transition:opacity .1s}
+.wax-ball::before{background:
+  linear-gradient(32deg,transparent 48%,rgba(60,30,10,.7) 49% 51%,transparent 52%),
+  linear-gradient(118deg,transparent 60%,rgba(60,30,10,.6) 61% 62.5%,transparent 63.5%),
+  linear-gradient(75deg,transparent 30%,rgba(60,30,10,.55) 31% 32%,transparent 33%)}
+.wax-ball::after{background:
+  linear-gradient(160deg,transparent 40%,rgba(60,30,10,.7) 41% 43%,transparent 44%),
+  linear-gradient(10deg,transparent 70%,rgba(60,30,10,.6) 71% 72%,transparent 73%),
+  radial-gradient(circle at 55% 60%,#d98fb0 0 22%,transparent 24%)}
+.wax-ball[data-c="1"]::before{opacity:.6}
+.wax-ball[data-c="2"]::before{opacity:1}
+.wax-ball[data-c="3"]::before,.wax-ball[data-c="3"]::after{opacity:1}
+.wax-ball.broken{background:radial-gradient(circle at 40% 35%,#e8a4c2 0 10%,#d98fb0 14% 65%,#b06b8c 100%);box-shadow:inset 0 4px 0 rgba(0,0,0,.15);transform:scale(.88)}
+.wax-ball.broken::before,.wax-ball.broken::after{opacity:0}
+.tools{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center}
+.small{font-family:var(--font-pix);font-size:12px;background:#2a2018;border:1px solid var(--line);color:var(--fg);padding:6px 10px;border-radius:3px;cursor:pointer}
+.small[aria-pressed="true"]{border-color:var(--accent-2);color:var(--accent-2)}
+.hint{font-size:12px;color:var(--mute);margin-right:auto}
+.credits{font-size:11px;color:#6f6354;line-height:1.6}
+.credits summary{cursor:pointer;color:#8a7b68}
+.credits a{color:#8a7b68}
+.overlay{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:60px;gap:12px;
+  background:rgba(20,16,12,.94);text-align:center;padding-inline:16px;border-radius:4px}
+.overlay[hidden]{display:none}
+.overlay p{margin:0;color:var(--mute);font-size:14px;max-width:36ch;line-height:1.55}
+.btn{font-family:var(--font-pix);font-size:15px;background:var(--accent);color:#1a1408;border:0;padding:12px 22px;cursor:pointer;box-shadow:0 4px 0 #a9823c;border-radius:3px}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 #a9823c}
+.btn:disabled{opacity:.6;cursor:wait}
+button:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.pad,.bub,.pi,.pad.switch::after{transition:none}.mixer .dot{animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>소리 믹싱 책상</h1>
+  <div class="stats">
+    <span>누름 <b id="taps">0</b></span>
+    <span>녹음 <b id="evs">0</b></span>
+    <span>뽁뽁이 <b id="pops">0</b> / 28</span>
+  </div>
+</header>
+
+<div class="mixer" id="mixer" data-st="idle">
+  <div class="timer" id="timer">1:00</div>
+  <div class="status"><span class="dot"></span><span id="stxt">자유롭게 눌러보고, 준비되면 녹음!</span></div>
+  <div class="mbtns">
+    <button class="mb rec" id="bRec" type="button">● 녹음 (1분)</button>
+    <button class="mb ghostb" id="bStopRec" type="button" hidden>■ 녹음 끝</button>
+    <button class="mb play" id="bPlay" type="button" hidden>▶ 무한 재생</button>
+    <button class="mb ghostb" id="bStop" type="button" hidden>■ 정지</button>
+    <button class="mb ghostb" id="bSave" type="button" hidden>⤓ WAV</button>
+  </div>
+  <div class="bar" id="bar"><i id="barFill"></i></div>
+</div>
+
+<div class="desk" id="desk">
+  <div class="overlay" id="overlay">
+    <h1>소리 믹싱 책상</h1>
+    <p><b style="color:var(--fg)">1분 동안 마구 누르면 그대로 녹음</b>돼요. 시간이 끝나거나 멈추면, 방금 만든 소리가 <b style="color:var(--fg)">똑같은 타이밍으로 무한 반복</b>되는 ASMR이 됩니다.</p>
+    <p>모든 소리는 실제 녹음이에요. 진짜 키보드로 타이핑해도 됩니다.</p>
+    <button class="btn" id="start">시작</button>
+  </div>
+
+  <div class="zone wrap">
+    <div class="lab"><span>뽁뽁이 <span class="src">실녹음 · 쓸어도 됨</span></span><button id="newwrap" type="button">새 뽁뽁이</button></div>
+    <div class="bubbles" id="bubbles"></div>
+  </div>
+
+  <div class="zone kb">
+    <div class="lab"><span>기계식 키보드 <span class="src">실녹음</span></span><span>실제 키보드도 됨</span></div>
+    <div class="keys" id="keys"></div>
+  </div>
+
+  <div class="zone pz">
+    <div class="lab"><span>팝잇 <span class="new">NEW</span></span><span class="src">눌렀다 뒤집기</span></div>
+    <div class="popit" id="popit"></div>
+  </div>
+  <div class="zone wax"><div class="lab"><span>왁뿌볼 <span class="src">실녹음(왁뿌 ASMR)</span></span><button id="newwax" type="button">새 왁뿌볼</button></div>
+    <div class="waxrow" id="waxrow"></div></div>
+
+  <div class="zone"><div class="lab"><span>슬라임</span><span class="src">꾹 쥐기</span></div><button class="pad slime" data-s="slime" data-hold="240" id="p-slime"><span>쮸왑</span></button></div>
+  <div class="zone"><div class="lab"><span>비누 자르기 <span class="new">NEW</span></span></div><button class="pad soap" data-s="soap" id="p-soap"><span>사각</span></button></div>
+  <div class="zone"><div class="lab"><span>키네틱 샌드 <span class="new">NEW</span></span><span class="src">꾹</span></div><button class="pad sand" data-s="sand" data-hold="420" id="p-sand"><span>스스슥</span></button></div>
+  <div class="zone"><div class="lab"><span>얼음 씹기 <span class="new">NEW</span></span><span class="src">꾹</span></div><button class="pad ice" data-s="ice" data-hold="300" id="p-ice"><span>와작</span></button></div>
+  <div class="zone"><div class="lab"><span>플로럴폼 <span class="new">NEW</span></span><span class="src">꾹</span></div><button class="pad foam" data-s="foam" data-hold="330" id="p-foam"><span>뽀득</span></button></div>
+  <div class="zone"><div class="lab"><span>유리잔 <span class="new">NEW</span></span></div><button class="pad glass" data-s="glass" id="p-glass"><span>챙</span></button></div>
+  <div class="zone"><div class="lab"><span>나무 블럭</span></div><button class="pad wood" data-s="knock" id="p-knock"><span>똑똑</span></button></div>
+  <div class="zone"><div class="lab"><span>마우스</span></div><button class="pad mouse" data-s="mouse" id="p-mouse"><span>딸깍</span></button></div>
+  <div class="zone"><div class="lab"><span>물방울</span></div><button class="pad water" data-s="drip" id="p-drip"><span>똑</span></button></div>
+  <div class="zone"><div class="lab"><span>물 따르기</span></div><button class="pad pour" data-s="pour" id="p-pour"><span>졸졸</span></button></div>
+  <div class="zone"><div class="lab"><span>구슬 <span class="new">NEW</span></span></div><button class="pad marble" data-s="marble" id="p-marble"><span>또르륵</span></button></div>
+  <div class="zone"><div class="lab"><span>가위질 <span class="new">NEW</span></span></div><button class="pad scissors" data-s="scissors" id="p-scissors"><span>싹둑</span></button></div>
+  <div class="zone"><div class="lab"><span>책장 넘기기 <span class="new">NEW</span></span></div><button class="pad page" data-s="page" id="p-page"><span>팔락</span></button></div>
+  <div class="zone"><div class="lab"><span>연필 <span class="new">NEW</span></span><span class="src">꾹</span></div><button class="pad pencil" data-s="pencil" data-hold="300" id="p-pencil"><span>사각사각</span></button></div>
+  <div class="zone"><div class="lab"><span>찍찍이 <span class="new">NEW</span></span></div><button class="pad velcro" data-s="velcro" id="p-velcro"><span>찌익</span></button></div>
+  <div class="zone"><div class="lab"><span>지퍼 <span class="new">NEW</span></span></div><button class="pad zipper" data-s="zipper" id="p-zipper"><span>지익</span></button></div>
+  <div class="zone"><div class="lab"><span>종이·테이프</span></div><button class="pad tape" data-s="paper" id="p-paper"><span>바스락</span></button></div>
+  <div class="zone"><div class="lab"><span>자갈</span></div><button class="pad gravel" data-s="stone" id="p-stone"><span>자갈</span></button></div>
+  <div class="zone"><div class="lab"><span>스위치</span></div><button class="pad switch" data-s="switch" id="p-switch" aria-pressed="false"></button></div>
+  <div class="zone"><div class="lab"><span>발소리</span></div><button class="pad floor" data-s="step" id="p-step"><span>저벅</span></button></div>
+  <div class="zone"><div class="lab"><span>문 경첩</span></div><button class="pad door" data-s="creak" id="p-creak"><span>끼익</span></button></div>
+</div>
+
+<div class="tools">
+  <span class="hint">이어폰 끼면 좌우가 갈려요. 배경음은 녹음되지 않고 계속 깔려요.</span>
+  <label class="vol">볼륨 <input type="range" id="vol" min="0" max="1.5" step="0.01" value="0.9"></label>
+  <button class="small" id="rain" aria-pressed="false">빗소리</button>
+  <button class="small" id="fire" aria-pressed="false">모닥불</button>
+</div>
+<details class="credits" open><summary>소리 출처 (Freesound 실녹음)</summary>
+<div><b>뽁뽁이</b>: <a href="https://freesound.org/s/344698/" target="_blank" rel="noopener">Bubblewrap_pop_plastic.wav</a> by Jamitch2 (CC0)</div>
+<div><b>기계식 키보드</b>: <a href="https://freesound.org/s/546167/" target="_blank" rel="noopener">Keyboard Typing 10 (WhiteFox, Mechanical)</a> by grcekh (CC0)</div>
+<div><b>팝잇</b>: <a href="https://freesound.org/s/868928/" target="_blank" rel="noopener">Infinate bubble wrap toy - Sony ICD-PX470</a> by Sadiquecat (CC0)</div>
+<div><b>왁뿌볼</b>: <a href="https://www.youtube.com/watch?v=nwPvPG-1UCw" target="_blank" rel="noopener">왁뿌 왕창 많이 하고 싶어서 만들어 본 왁뿌볼 ASMR</a> by <a href="https://www.youtube.com/channel/UCa_ZCXMQ57PDcpE_3tPOW1g" target="_blank" rel="noopener">rappeler하쁠리</a> (YouTube, 2:00–5:00 구간에서 바사삭 소리 10개 발췌)</div>
+<div><b>슬라임(+왁뿌볼 속 점토)</b>: <a href="https://freesound.org/s/207142/" target="_blank" rel="noopener">MudSquelch.wav</a> by ahill86 (CC0) · <a href="https://freesound.org/s/445968/" target="_blank" rel="noopener">So slimy!</a> by Breviceps (CC0)</div>
+<div><b>비누 자르기</b>: <a href="https://freesound.org/s/655283/" target="_blank" rel="noopener">cutting soap with box cutter.wav</a> by __bernicetredoux (CC BY 4.0)</div>
+<div><b>키네틱 샌드</b>: <a href="https://freesound.org/s/662864/" target="_blank" rel="noopener">digging sand with hands.WAV</a> by schneidi67 (CC0)</div>
+<div><b>얼음 씹기</b>: <a href="https://freesound.org/s/187331/" target="_blank" rel="noopener">Crunching and Chewing Ice Cubes.wav</a> by baidonovan (CC0) · <a href="https://freesound.org/s/443058/" target="_blank" rel="noopener">Ice_Chewing_Edited.wav</a> by AmberdeMeillon (CC0)</div>
+<div><b>플로럴폼</b>: <a href="https://freesound.org/s/560166/" target="_blank" rel="noopener">Floral foam with water.wav</a> by Yajhaira (CC0) · <a href="https://freesound.org/s/560167/" target="_blank" rel="noopener">Floral foam.wav</a> by Yajhaira (CC0)</div>
+<div><b>유리잔</b>: <a href="https://freesound.org/s/119839/" target="_blank" rel="noopener">Glass_Clink.aif</a> by kbnevel (CC0) · <a href="https://freesound.org/s/35631/" target="_blank" rel="noopener">crystal_glass.wav</a> by reinsamba (CC BY 4.0)</div>
+<div><b>나무 블럭</b>: <a href="https://freesound.org/s/190027/" target="_blank" rel="noopener">Hits on wood</a> by Aiwha (CC BY 4.0)</div>
+<div><b>물방울</b>: <a href="https://freesound.org/s/351623/" target="_blank" rel="noopener">Water Drops.wav</a> by ReiyaManor (CC0) · <a href="https://freesound.org/s/536113/" target="_blank" rel="noopener">Water Drop Single</a> by EminYILDIRIM (CC BY 4.0)</div>
+<div><b>구슬</b>: <a href="https://freesound.org/s/34732/" target="_blank" rel="noopener">marble.wav</a> by scotru (CC BY 4.0) · <a href="https://freesound.org/s/37993/" target="_blank" rel="noopener">Marble drop.wav</a> by kathol (CC0)</div>
+<div><b>가위질</b>: <a href="https://freesound.org/s/24795/" target="_blank" rel="noopener">scissors1.wav</a> by reinsamba (CC BY 4.0) · <a href="https://freesound.org/s/445965/" target="_blank" rel="noopener">Scissors / cutting / hair cutting</a> by Breviceps (CC0)</div>
+<div><b>책장 넘기기</b>: <a href="https://freesound.org/s/408786/" target="_blank" rel="noopener">Flipping through a book.wav</a> by Tats14 (CC BY-NC 3.0) · <a href="https://freesound.org/s/416179/" target="_blank" rel="noopener">Book, Flipping Through Pages, A.wav</a> by InspectorJ (CC BY 4.0) · <a href="https://freesound.org/s/63318/" target="_blank" rel="noopener">Page Turn - Please Turn Over (PTO) - paper_turn_over.wav</a> by flag2 (CC BY 4.0)</div>
+<div><b>연필</b>: <a href="https://freesound.org/s/398271/" target="_blank" rel="noopener">Pencil, Writing, Close, A.wav</a> by InspectorJ (CC BY 4.0)</div>
+<div><b>찍찍이</b>: <a href="https://freesound.org/s/179020/" target="_blank" rel="noopener">Velcro Rip (Fast).wav</a> by SmartWentCody (CC BY 4.0) · <a href="https://freesound.org/s/267713/" target="_blank" rel="noopener">Velcro</a> by WeeJee_vdH (CC0) · <a href="https://freesound.org/s/28549/" target="_blank" rel="noopener">velcro4.wav</a> by HerbertBoland (CC BY 4.0)</div>
+<div><b>지퍼</b>: <a href="https://freesound.org/s/328132/" target="_blank" rel="noopener">Zipper slow.wav</a> by Maynardkenmuir (CC BY-NC 3.0) · <a href="https://freesound.org/s/85679/" target="_blank" rel="noopener">Double_Zipper_fast.aif</a> by tmkappelt (CC0)</div>
+<div><b>종이</b>: <a href="https://freesound.org/s/456769/" target="_blank" rel="noopener">Office paper crumple folding handling.wav</a> by WavJunction.com (CC0)</div>
+<div><b>테이프</b>: <a href="https://freesound.org/s/369915/" target="_blank" rel="noopener">Scotch Tape.wav</a> by Mrthenoronha (CC0)</div>
+<div><b>자갈</b>: <a href="https://freesound.org/s/34174/" target="_blank" rel="noopener">pebbles in the hand.wav</a> by Dalibor (CC0) · <a href="https://freesound.org/s/362407/" target="_blank" rel="noopener">pebbles.wav</a> by Turtlemandan (CC0)</div>
+<div><b>스위치</b>: <a href="https://freesound.org/s/257958/" target="_blank" rel="noopener">Light Switch ON / OFF</a> by FillSoko (CC0) · <a href="https://freesound.org/s/457037/" target="_blank" rel="noopener">Light Switch (on / off)</a> by Breviceps (CC0)</div>
+<div><b>문 경첩</b>: <a href="https://freesound.org/s/219492/" target="_blank" rel="noopener">Door - Creak 02.wav</a> by JarredGibb (CC0) · <a href="https://freesound.org/s/219499/" target="_blank" rel="noopener">Door - Creak.wav</a> by JarredGibb (CC0)</div>
+<div><b>모닥불</b>: <a href="https://freesound.org/s/363092/" target="_blank" rel="noopener">Fire Crackle and Flames 002</a> by TheWoodlandNomad (CC0)</div>
+<div><b>마우스·물 따르기·발소리·빗소리</b>: <a href="https://github.com/karolpiczak/ESC-50" target="_blank" rel="noopener">ESC-50</a> 수록 Freesound 클립 — 마우스 MegaPenguin13·aneolus·j1987, 물 따르기 antwash·vibe_crc, 발소리 RutgerMuller, 비 cognito perceptu (CC0)</div>
+<div>개인용(비배포) 장난감. 원본에서 한 번 소리씩 잘라 무음 제거·음량 맞춤(44.1kHz 모노 mp3)했습니다.</div>
+</details>
+
+<script>
+const SOUNDS = /*__SOUNDS__*/{};
+</script>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const LOOP_MAX = 60;           // 녹음 최대 길이(초)
+let ctx, master, taps = 0, pops = 0;
+const BUF = {};                // 이름 → AudioBuffer[]
+const AMB = {};                // 배경음(빗소리·모닥불)
+
+// ── 오디오 기초 ───────────────────────────────────────────
+async function initAudio(){
+  if (ctx) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)({latencyHint:'interactive'});
+  master = ctx.createGain(); master.gain.value = +$('vol').value; master.connect(ctx.destination);
+  const jobs = [];
+  for (const [name, list] of Object.entries(SOUNDS)){
+    BUF[name] = new Array(list.length);
+    list.forEach((b64, i) => {
+      const bin = atob(b64), u8 = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) u8[k] = bin.charCodeAt(k);
+      jobs.push(new Promise(res => ctx.decodeAudioData(u8.buffer, b => { BUF[name][i] = b; res(); }, () => res())));
+    });
+  }
+  await Promise.all(jobs);
+  for (const k in BUF) BUF[k] = BUF[k].filter(Boolean);
+  window.__asmr = { BUF, get ctx(){ return ctx; }, REC, P, M: () => MIX }; // 테스트용 훅
+}
+const rnd = (a,b) => a + Math.random()*(b-a);
+function panOf(el){ const r = el.getBoundingClientRect(); const x = ((r.left+r.width/2)/window.innerWidth)*1.4-.7; return Math.max(-.8, Math.min(.8, x)); }
+
+// 모든 소리는 이 함수 하나로 난다. 녹음 중이면 (시각, 버퍼, 음높이, 음량, 좌우)를 그대로 기록한다.
+let CUR = null; // 지금 소리를 낸 물건의 id (재생 때 반짝이게)
+function play(name, pan, {rate=[.94,1.06], vol=1, t0=0, dur=null, offset=0, at=null, idx=null, r=null, el=null, dest=null}={}){
+  const list = BUF[name]; if (!list || !list.length) return null;
+  const i = idx ?? ((Math.random()*list.length)|0);
+  const rr = r ?? rnd(rate[0], rate[1]);
+  const when = at ?? (ctx.currentTime + t0);
+  const src = ctx.createBufferSource(); src.buffer = list[i % list.length]; src.playbackRate.value = rr;
+  const gn = ctx.createGain(); gn.gain.value = vol;
+  const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+  src.connect(gn); if (p){ p.pan.value = pan; gn.connect(p); p.connect(dest || master); } else gn.connect(dest || master);
+  src.start(Math.max(when, ctx.currentTime), offset, dur ?? undefined);
+  if (at === null && REC.on) REC.log({t: when - REC.t0, n:name, i, r:rr, v:vol, p:pan, d:dur, o:offset, el: el || CUR});
+  return src;
+}
+
+// ── 소리 사전 ─────────────────────────────────────────────
+const S = {
+  bubble(pan){ play('pop', pan, {rate:[.88,1.12], vol:1}); },
+  keyDown(pan,i){ play('keys', pan, {rate:[.92+(i%7)*.018, .97+(i%7)*.018], vol:1}); },
+  keyUp(pan){ play('keys', pan, {rate:[1.12,1.25], vol:.3}); },
+  space(pan){ play('keys', pan, {rate:[.72,.8], vol:1.15}); },
+  knock(pan){ play('knock', pan); },
+  mouse(pan){ play('mouse', pan, {rate:[.95,1.05]}); play('mouse', pan, {rate:[1.05,1.15], vol:.55, t0:rnd(.07,.12)}); },
+  drip(pan){ play('drip', pan, {rate:[.85,1.18]}); },
+  pour(pan){ play('pour', pan, {rate:[.95,1.05], vol:.8}); },
+  step(pan){ play('step', pan, {vol:.8}); },
+  creak(pan){ play('creak', pan, {rate:[.88,1.1], vol:.8}); },
+  stone(pan){ play('stone', pan); play('stone', pan, {vol:.5, t0:rnd(.05,.1), rate:[1,1.1]}); },
+  paper(pan){ Math.random() < .3 ? play('tape', pan, {vol:.8}) : play('paper', pan, {vol:.9}); },
+  switch(pan,on){ play('switch', pan, {rate: on ? [1.02,1.08] : [.88,.94]}); },
+  slime(pan){ play('slime', pan, {rate:[.85,1.1], vol:1}); },
+  soap(pan){ play('soap', pan, {rate:[.95,1.05], vol:1}); },
+  sand(pan){ play('sand', pan, {rate:[.9,1.08], vol:.9}); },
+  ice(pan){ play('ice', pan, {rate:[.92,1.08], vol:1}); },
+  foam(pan){ play('foam', pan, {rate:[.92,1.1], vol:1}); },
+  glass(pan){ play('glass', pan, {rate:[.9,1.12], vol:.7}); },
+  marble(pan){ play('marble', pan, {rate:[.95,1.1]}); play('marble', pan, {rate:[1.1,1.25], vol:.35, t0:rnd(.14,.22)}); },
+  scissors(pan){ play('scissors', pan, {rate:[.95,1.08]}); },
+  page(pan){ play('page', pan, {rate:[.95,1.05], vol:.9}); },
+  pencil(pan){ play('pencil', pan, {rate:[.92,1.1], vol:.9}); },
+  velcro(pan){ play('velcro', pan, {rate:[.95,1.05], vol:.8}); },
+  zipper(pan){ play('zipper', pan, {rate:[.95,1.08], vol:.8}); },
+  popIn(pan){ play('popit', pan, {rate:[.92,1.04], vol:1}); },
+  popOut(pan){ play('popit', pan, {rate:[1.12,1.28], vol:.75}); },
+  // 왁뿌볼: 실제 왁뿌볼 부수는 ASMR 영상에서 잘라낸 바사삭 소리. level 1(새것)→0(다 깨짐)
+  wax(pan, level){
+    const n = 1 + Math.round(2*level);
+    for (let i = 0; i < n; i++) play('wax', pan, {rate:[.94,1.08], vol:.55+.5*level, t0: i ? Math.pow(Math.random(),1.5)*.22*(.4+level) : 0});
+  },
+  clay(pan){ play('slime', pan, {rate:[.7,.82], vol:.55}); },
+};
+
+// 물건을 누를 때는 전부 act()를 거친다: 녹음 대기 상태면 여기서 녹음이 시작된다
+function act(el, fn){
+  if (!ctx) return;
+  if (REC.state === 'armed') beginRec();
+  CUR = el ? el.id : null; try { fn(); } finally { CUR = null; }
+}
+function toggleAmb(name, on, vol){
+  if (on && !AMB[name]){
+    const list = BUF[name]; if (!list || !list.length) return;
+    const src = ctx.createBufferSource(); src.buffer = list[0]; src.loop = true;
+    const gn = ctx.createGain(); gn.gain.setValueAtTime(0,ctx.currentTime); gn.gain.linearRampToValueAtTime(vol,ctx.currentTime+1.5);
+    src.connect(gn); gn.connect(master); src.start(); AMB[name] = {src,gn};
+  } else if (!on && AMB[name]){ const r = AMB[name]; delete AMB[name]; r.gn.gain.cancelScheduledValues(ctx.currentTime); r.gn.gain.setValueAtTime(r.gn.gain.value, ctx.currentTime); r.gn.gain.linearRampToValueAtTime(0,ctx.currentTime+.8); r.src.stop(ctx.currentTime+.9); }
+}
+function count(){ taps++; $('taps').textContent = taps; }
+
+// ── 녹음 ─────────────────────────────────────────────────
+// state: idle(자유 연주) → armed(첫 소리 기다림) → rec(녹음 중) → play(무한 재생) / ready(정지, 녹음 있음)
+const REC = { state:'idle', on:false, t0:0, events:[],
+  log(e){ if (e.t < 0 || e.t >= LOOP_MAX) return; this.events.push(e); $('evs').textContent = this.events.length; markEv(e.t / LOOP_MAX); } };
+let MIX = null; // {len, events}
+const mixer = $('mixer'), timer = $('timer'), barFill = $('barFill'), bar = $('bar');
+function fmt(s){ s = Math.max(0, s); const m = Math.floor(s/60), r = s - m*60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(r >= 10 || m ? 0 : 1).replace(/^(\d)$/, '0$1'); }
+function fmtT(s){ s = Math.max(0,s); const m = Math.floor(s/60), r = Math.floor(s%60), d = Math.floor((s*10)%10); return `${m}:${String(r).padStart(2,'0')}.${d}`; }
+function clearMarks(){ bar.querySelectorAll('.ev').forEach(x => x.remove()); }
+let lastMark = -1;
+function markEv(frac){ const px = Math.round(frac*400); if (px === lastMark) return; lastMark = px; const d = document.createElement('span'); d.className = 'ev'; d.style.left = (frac*100)+'%'; bar.appendChild(d); }
+function setState(st, text){
+  REC.state = st; mixer.dataset.st = st; if (text) $('stxt').textContent = text;
+  const has = !!(MIX && MIX.events.length);
+  $('bRec').hidden = !(st === 'idle' || st === 'ready' || st === 'play');
+  $('bRec').textContent = (st === 'idle' && !has) ? '● 녹음 (1분)' : '● 다시 녹음';
+  $('bStopRec').hidden = !(st === 'armed' || st === 'rec');
+  $('bStopRec').textContent = st === 'armed' ? '✕ 취소' : '■ 녹음 끝';
+  $('bPlay').hidden = !((st === 'ready' || st === 'idle') && has);
+  $('bStop').hidden = st !== 'play';
+  $('bSave').hidden = !(has && (st === 'ready' || st === 'play' || st === 'idle'));
+}
+function armRec(){
+  stopLoop(); REC.events = []; $('evs').textContent = 0; clearMarks(); lastMark = -1;
+  timer.textContent = '1:00'; barFill.style.width = '0';
+  setState('armed', '아무거나 누르면 녹음이 시작돼요');
+}
+function beginRec(){
+  REC.on = true; REC.t0 = ctx.currentTime; setState('rec', '녹음 중 — 마구 눌러요!');
+  // 버블·팝잇이 바닥나지 않게 녹음 시작 때 새로 깔아 준다
+  if (pops >= 20) buildWrap();
+  requestAnimationFrame(recTick);
+}
+function recTick(){
+  if (REC.state !== 'rec') return;
+  const el = ctx.currentTime - REC.t0;
+  timer.textContent = fmtT(LOOP_MAX - el); barFill.style.width = Math.min(100, el/LOOP_MAX*100) + '%';
+  if (el >= LOOP_MAX) { finishRec(LOOP_MAX); return; }
+  requestAnimationFrame(recTick);
+}
+function finishRec(len){
+  if (REC.state !== 'rec') return;
+  REC.on = false; holdStopAll();
+  len = Math.min(LOOP_MAX, Math.max(len, 0));
+  const ev = REC.events.filter(e => e.t < len).sort((a,b) => a.t - b.t);
+  if (!ev.length){ setState(MIX && MIX.events.length ? 'ready' : 'idle', '녹음된 소리가 없어요. 다시 해볼까요?'); timer.textContent = '1:00'; barFill.style.width='0'; return; }
+  // 너무 짧게 멈추면 마지막 소리 뒤에 숨 쉴 틈을 조금 준다
+  len = Math.max(len, ev[ev.length-1].t + .25, 1);
+  MIX = { len: +len.toFixed(3), events: ev, at: Date.now() };
+  try { localStorage.setItem('sori-mix-v1', JSON.stringify(MIX)); } catch(_){}
+  startLoop();
+}
+// ── 무한 루프 재생 (lookahead 스케줄러) ──────────────────────
+const P = { on:false, start:0, k:0, i:0, timer:null, srcs:new Set(), raf:0 };
+function startLoop(){
+  if (!MIX || !MIX.events.length) return;
+  stopLoop(); if (ctx.state === 'suspended') ctx.resume();
+  P.on = true; P.start = ctx.currentTime + .08; P.k = 0; P.i = 0;
+  drawMarks(); setState('play', `무한 재생 중 · ${MIX.len.toFixed(1)}초 루프 · 소리 ${MIX.events.length}개`);
+  schedule(); P.timer = setInterval(schedule, 25); P.raf = requestAnimationFrame(playTick);
+}
+function schedule(){
+  if (!P.on) return;
+  const ev = MIX.events, len = MIX.len, now = ctx.currentTime;
+  const horizon = now + (document.hidden ? 1.5 : .2); // 백그라운드 탭에선 타이머가 느려지니 더 멀리 예약
+  for (let guard = 0; guard < 5000; guard++){
+    if (P.i >= ev.length){ P.i = 0; P.k++; }
+    const e = ev[P.i], when = P.start + P.k*len + e.t;
+    if (when > horizon) break;
+    if (when >= now - .03){
+      const s = play(e.n, e.p, {at: when, idx: e.i, r: e.r, vol: e.v, dur: e.d, offset: e.o || 0});
+      if (s){ P.srcs.add(s); s.onended = () => P.srcs.delete(s); }
+      if (e.el && !document.hidden) flash(e.el, when - now);
+    }
+    P.i++;
+  }
+}
+function flash(id, delay){
+  setTimeout(() => { if (!P.on) return; const el = document.getElementById(id); if (!el) return;
+    el.classList.add('ghost'); clearTimeout(el._g); el._g = setTimeout(() => el.classList.remove('ghost'), 130); }, Math.max(0, delay*1000));
+}
+function playTick(){
+  if (!P.on) return;
+  const pos = ((ctx.currentTime - P.start) % MIX.len + MIX.len) % MIX.len;
+  timer.textContent = fmtT(pos); barFill.style.width = (pos/MIX.len*100) + '%';
+  P.raf = requestAnimationFrame(playTick);
+}
+function stopLoop(){
+  if (!P.on) return; P.on = false; clearInterval(P.timer); cancelAnimationFrame(P.raf);
+  const t = ctx.currentTime; P.srcs.forEach(s => { try { s.stop(t + .02); } catch(_){} }); P.srcs.clear();
+  document.querySelectorAll('.ghost').forEach(x => x.classList.remove('ghost'));
+}
+function drawMarks(){ clearMarks(); lastMark = -1; if (!MIX) return; for (const e of MIX.events) markEv(e.t / MIX.len); }
+
+// ── WAV 저장: 루프 한 바퀴를 오프라인으로 렌더 (끝에서 넘친 꼬리는 앞에 겹쳐 이음새 없게) ──
+async function saveWav(){
+  if (!MIX) return; const btn = $('bSave'); btn.disabled = true; btn.textContent = '만드는 중…';
+  try {
+    const sr = 44100, tail = 3, L = Math.ceil(MIX.len*sr), N = Math.ceil((MIX.len+tail)*sr);
+    const oc = new OfflineAudioContext(2, N, sr);
+    for (const e of MIX.events){
+      const list = BUF[e.n]; if (!list || !list.length) continue;
+      const s = oc.createBufferSource(); s.buffer = list[e.i % list.length]; s.playbackRate.value = e.r;
+      const g = oc.createGain(); g.gain.value = e.v * master.gain.value; const p = oc.createStereoPanner(); p.pan.value = e.p;
+      s.connect(g); g.connect(p); p.connect(oc.destination); s.start(e.t, e.o || 0, e.d ?? undefined);
+    }
+    const buf = await oc.startRendering();
+    const ch = [buf.getChannelData(0).slice(0, L), buf.getChannelData(1).slice(0, L)];
+    for (let c = 0; c < 2; c++){ const full = buf.getChannelData(c); for (let j = L; j < N; j++) ch[c][(j - L) % L] += full[j]; }
+    const data = new DataView(new ArrayBuffer(44 + L*4));
+    const w = (o, s) => { for (let k = 0; k < s.length; k++) data.setUint8(o+k, s.charCodeAt(k)); };
+    w(0,'RIFF'); data.setUint32(4, 36 + L*4, true); w(8,'WAVE'); w(12,'fmt '); data.setUint32(16,16,true); data.setUint16(20,1,true); data.setUint16(22,2,true);
+    data.setUint32(24,sr,true); data.setUint32(28,sr*4,true); data.setUint16(32,4,true); data.setUint16(34,16,true); w(36,'data'); data.setUint32(40,L*4,true);
+    let o = 44; for (let j = 0; j < L; j++) for (let c = 0; c < 2; c++){ const v = Math.max(-1, Math.min(1, ch[c][j])); data.setInt16(o, v < 0 ? v*0x8000 : v*0x7fff, true); o += 2; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], {type:'audio/wav'}));
+    a.download = `asmr-mix-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.wav`; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  } finally { btn.disabled = false; btn.textContent = '⤓ WAV'; }
+}
+
+// ── 뽁뽁이 ───────────────────────────────────────────────
+const bubbles = $('bubbles');
+function popBub(b){ if (b.classList.contains('flat')) return; b.classList.add('flat'); pops++; $('pops').textContent = pops; count();
+  act(b, () => S.bubble(panOf(b)));
+  if (pops >= 28) setTimeout(buildWrap, 450); // 다 터뜨리면 새 뽁뽁이 자동 보충
+}
+function buildWrap(){
+  bubbles.innerHTML = ''; pops = 0; $('pops').textContent = 0;
+  for (let i = 0; i < 28; i++){
+    const b = document.createElement('button'); b.className = 'bub'; b.type = 'button'; b.id = 'b'+i; b.setAttribute('aria-label','뽁뽁이');
+    b.addEventListener('pointerdown', e => { e.preventDefault(); if (ctx) popBub(b); });
+    bubbles.appendChild(b);
+  }
+}
+// 쓸기: 터치는 포인터가 처음 요소에 묶이니 elementFromPoint로 손가락 아래를 찾는다
+bubbles.addEventListener('pointermove', e => { if (!ctx || (e.pointerType === 'mouse' && !(e.buttons & 1))) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  if (el && el.classList.contains('bub')) popBub(el); });
+$('newwrap').addEventListener('click', buildWrap);
+
+// ── 팝잇 ─────────────────────────────────────────────────
+const popit = $('popit');
+for (let i = 0; i < 18; i++){
+  const b = document.createElement('button'); b.className = 'pi'; b.type = 'button'; b.id = 'q'+i; b.setAttribute('aria-label','팝잇');
+  b.addEventListener('pointerdown', e => { e.preventDefault(); popToggle(b); });
+  popit.appendChild(b);
+}
+let lastPi = new Map(); // pointerId → 마지막으로 누른 칸 (쓸기용)
+function popToggle(b){ if (!ctx) return; count(); const inn = !b.classList.contains('in'); b.classList.toggle('in', inn);
+  act(b, () => inn ? S.popIn(panOf(b)) : S.popOut(panOf(b))); }
+popit.addEventListener('pointerdown', e => lastPi.set(e.pointerId, document.elementFromPoint(e.clientX, e.clientY)));
+popit.addEventListener('pointermove', e => { if (!ctx || (e.pointerType === 'mouse' && !(e.buttons & 1))) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  if (el && el.classList.contains('pi') && lastPi.get(e.pointerId) !== el){ lastPi.set(e.pointerId, el); popToggle(el); } });
+['pointerup','pointercancel'].forEach(ev => popit.addEventListener(ev, e => lastPi.delete(e.pointerId)));
+
+// ── 키보드 ───────────────────────────────────────────────
+const ROWS = [['ㅂ','ㅈ','ㄷ','ㄱ','ㅅ','ㅛ','ㅕ','ㅑ'],['ㅁ','ㄴ','ㅇ','ㄹ','ㅎ','ㅗ','ㅓ','ㅏ'],['ㅋ','ㅌ','ㅊ','ㅍ','ㅠ','ㅜ','ㅡ']];
+const keysEl = $('keys'), keyEls = [];
+ROWS.forEach((row,ri) => {
+  const r = document.createElement('div'); r.className = 'row';
+  row.forEach((ch,ci) => { const k = document.createElement('button'); k.className = 'key'; k.type = 'button'; k.textContent = ch; k.dataset.i = ri*8+ci; k.id = 'k'+(ri*8+ci); r.appendChild(k); keyEls.push(k); });
+  if (ri === 2){ const sp = document.createElement('button'); sp.className = 'key space'; sp.type = 'button'; sp.dataset.i = 'space'; sp.id = 'kspace'; sp.setAttribute('aria-label','스페이스'); r.appendChild(sp); keyEls.push(sp); }
+  keysEl.appendChild(r);
+});
+function keyPress(k){ if (!ctx || k.classList.contains('down')) return; k.classList.add('down'); count();
+  act(k, () => k.dataset.i==='space' ? S.space(panOf(k)) : S.keyDown(panOf(k), +k.dataset.i)); }
+function keyRelease(k){ if (!ctx || !k.classList.contains('down')) return; k.classList.remove('down'); if (k.dataset.i!=='space') act(k, () => S.keyUp(panOf(k))); }
+keyEls.forEach(k => {
+  k.addEventListener('pointerdown', e => { e.preventDefault(); keyPress(k); });
+  ['pointerup','pointercancel','pointerleave'].forEach(ev => k.addEventListener(ev, () => keyRelease(k)));
+});
+const physMap = new Map();
+window.addEventListener('keydown', e => { if (!ctx || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return; if (e.key===' ') e.preventDefault();
+  let k = physMap.get(e.code); if (!k){ k = e.key===' ' ? keyEls[keyEls.length-1] : keyEls[(e.code.split('').reduce((a,c)=>a+c.charCodeAt(0),0)) % (keyEls.length-1)]; physMap.set(e.code,k); }
+  keyPress(k); });
+window.addEventListener('keyup', e => { const k = physMap.get(e.code); if (k) keyRelease(k); });
+
+// ── 패드 (data-hold 가 있으면 쥐고 있는 동안 반복) ──────────────
+const HOLDS = new Map(); // 패드 → interval
+function holdStop(p){ const h = HOLDS.get(p); if (h){ clearInterval(h); HOLDS.delete(p); } p.classList.remove('held'); }
+function holdStopAll(){ [...HOLDS.keys()].forEach(holdStop); }
+document.querySelectorAll('.pad').forEach(p => {
+  const s = p.dataset.s, hold = +p.dataset.hold || 0;
+  p.addEventListener('pointerdown', e => { e.preventDefault(); if (!ctx) return; count();
+    if (s === 'switch'){ const on = !p.classList.contains('on'); p.classList.toggle('on',on); p.setAttribute('aria-pressed',on); act(p, () => S.switch(panOf(p),on)); return; }
+    if (s === 'scissors'){ p.classList.add('snip'); setTimeout(() => p.classList.remove('snip'), 110); }
+    act(p, () => S[s](panOf(p)));
+    if (hold){ holdStop(p); p.classList.add('held');
+      HOLDS.set(p, setInterval(() => { if (!ctx) return; act(p, () => S[s](panOf(p) + rnd(-.08,.08))); }, hold)); }
+  });
+  if (hold) ['pointerup','pointercancel','pointerleave'].forEach(ev => p.addEventListener(ev, () => holdStop(p)));
+});
+
+// ── 왁뿌볼 ───────────────────────────────────────────────
+const WAXC = ['#f3d36b','#9fd8c2','#f0a7a0'];
+const waxrow = $('waxrow');
+function buildWax(){
+  waxrow.innerHTML = '';
+  WAXC.forEach((c, wi) => {
+    const b = document.createElement('button'); b.className = 'wax-ball'; b.type = 'button'; b.id = 'w'+wi; b.style.setProperty('--wc', c);
+    b.setAttribute('aria-label','왁뿌볼'); b.dataset.c = 0;
+    const press = () => { const c = +b.dataset.c;
+      if (c >= 3){ act(b, () => S.clay(panOf(b))); return; }
+      act(b, () => S.wax(panOf(b), 1 - c/3)); b.dataset.c = c+1; if (c+1 >= 3) setTimeout(()=>b.classList.add('broken'), 80); };
+    b.addEventListener('pointerdown', e => { e.preventDefault(); if (!ctx) return; count(); press();
+      HOLDS.set(b, setInterval(()=>{ act(b, () => { if (+b.dataset.c < 3) S.wax(panOf(b), .3*(1-(+b.dataset.c)/3)); else S.clay(panOf(b)); }); }, 300)); });
+    ['pointerup','pointercancel','pointerleave'].forEach(ev => b.addEventListener(ev, () => { const h = HOLDS.get(b); if (h){ clearInterval(h); HOLDS.delete(b); } }));
+    waxrow.appendChild(b);
+  });
+}
+$('newwax').addEventListener('click', buildWax);
+buildWax();
+
+window.addEventListener('blur', () => { holdStopAll(); keyEls.forEach(keyRelease); });
+document.addEventListener('contextmenu', e => { if (e.target.closest('.desk')) e.preventDefault(); });
+// iOS 더블탭 확대 방지 (touch-action 보조). click을 쓰는 버튼(믹서 등)은 막지 않는다
+let lastTouch = 0; document.addEventListener('touchend', e => { const n = Date.now(); if (n - lastTouch < 350 && e.target.closest('.pad,.bub,.pi,.key,.wax-ball')) e.preventDefault(); lastTouch = n; }, {passive:false});
+
+// ── 버튼 ─────────────────────────────────────────────────
+$('start').addEventListener('click', async e => {
+  e.currentTarget.disabled = true; e.currentTarget.textContent = '소리 불러오는 중…';
+  await initAudio(); if (ctx.state==='suspended') await ctx.resume();
+  $('overlay').hidden = true; S.knock(0);
+  try { const m = JSON.parse(localStorage.getItem('sori-mix-v1') || 'null'); if (m && m.events && m.events.length) { MIX = m; drawMarks(); setState('idle', `지난 믹스(${m.len.toFixed(1)}초)가 있어요. ▶로 들어보세요`); } } catch(_){}
+});
+$('bRec').addEventListener('click', () => { if (ctx) armRec(); });
+$('bStopRec').addEventListener('click', () => {
+  if (REC.state === 'armed'){ setState(MIX && MIX.events.length ? 'ready' : 'idle', '녹음 취소'); if (MIX) drawMarks(); timer.textContent = '1:00'; return; }
+  finishRec(ctx.currentTime - REC.t0);
+});
+$('bPlay').addEventListener('click', startLoop);
+$('bStop').addEventListener('click', () => { stopLoop(); setState('ready', '정지. ▶로 다시 듣거나 다시 녹음해요'); barFill.style.width = '0'; timer.textContent = fmtT(0); });
+$('bSave').addEventListener('click', saveWav);
+$('vol').addEventListener('input', e => { if (master) master.gain.setTargetAtTime(+e.target.value, ctx.currentTime, .02); });
+[['rain',.45],['fire',.5]].forEach(([id, v]) => $(id).addEventListener('click', e => { if (!ctx) return; const on = e.currentTarget.getAttribute('aria-pressed') !== 'true'; e.currentTarget.setAttribute('aria-pressed',on); toggleAmb(id, on, v); }));
+document.addEventListener('visibilitychange', () => { if (P.on) schedule(); });
+buildWrap();
+setState('idle');
+})();
+</script>
+</body>
+</html>
